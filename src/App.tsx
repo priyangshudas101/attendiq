@@ -236,6 +236,7 @@ export function App() {
           <Dashboard
             session={session}
             onNavigateToAttendance={() => setActivePage('Attendance')}
+            onNavigateToSubjects={() => setActivePage('Subjects')}
             onNavigateToCR={() => setActivePage('CR Updates')}
             userRole={profile.role}
             userName={profile.fullName}
