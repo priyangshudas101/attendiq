@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { Auth } from './components/Auth';
@@ -7,23 +7,39 @@ import { Attendance } from './components/Attendance';
 import { Subjects } from './components/Subjects';
 import { Settings } from './components/Settings';
 import { CRPortal } from './components/CRPortal';
+import {
+  IconDashboard,
+  IconAttendance,
+  IconSubjects,
+  IconCRPortal,
+  IconSettings,
+  IconSun,
+  IconMoon,
+  IconLogOut,
+} from './components/Icons';
 import './App.css';
 
-type Page = 'Dashboard' | 'Attendance' | 'Subjects' | 'Settings' | 'CR Portal';
+export type Page = 'Dashboard' | 'Attendance' | 'Subjects' | 'CR Updates' | 'Settings';
 
 interface ProfileState {
   fullName: string;
   department: string;
   role: 'student' | 'cr' | 'admin';
+  rollNumber?: string;
 }
 
-function App() {
+interface NavItemConfig {
+  page: Page;
+  label: string;
+  icon: React.ReactNode;
+}
+
+export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [activePage, setActivePage] = useState<Page>('Dashboard');
   const [darkMode, setDarkMode] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileState>({
     fullName: '',
     department: 'CSE Department',
@@ -34,27 +50,28 @@ function App() {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('full_name, department, role')
+        .select('full_name, department, role, roll_number')
         .eq('id', userId)
         .single();
 
       if (data && data.full_name) {
         setProfile({
           fullName: data.full_name,
-          department: data.department || 'CSE Department',
+          department: data.department || 'Computer Science & Engineering',
           role: data.role || 'student',
+          rollNumber: data.roll_number || '',
         });
       } else {
         setProfile({
           fullName: email ? email.split('@')[0] : 'Student',
-          department: 'CSE Department',
+          department: 'Computer Science & Engineering',
           role: 'student',
         });
       }
     } catch {
       setProfile({
         fullName: email ? email.split('@')[0] : 'Student',
-        department: 'CSE Department',
+        department: 'Computer Science & Engineering',
         role: 'student',
       });
     }
@@ -95,11 +112,6 @@ function App() {
     await supabase.auth.signOut();
   };
 
-  const handleNavClick = (page: Page) => {
-    setActivePage(page);
-    setMobileMenuOpen(false);
-  };
-
   if (loadingSession) {
     return (
       <div
@@ -108,11 +120,13 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0f172a',
-          color: '#94a3b8',
+          background: 'var(--bg-app)',
+          color: 'var(--text-muted)',
+          fontSize: '0.9rem',
+          fontWeight: 600,
         }}
       >
-        Loading AttendIQ...
+        Loading AttendIQ Portal...
       </div>
     );
   }
@@ -130,103 +144,101 @@ function App() {
     return <Auth onAuthSuccess={() => {}} />;
   }
 
-  const navItems: Page[] = ['Dashboard', 'Attendance', 'Subjects'];
+  const navItems: NavItemConfig[] = [
+    {
+      page: 'Dashboard',
+      label: 'Dashboard',
+      icon: <IconDashboard size={16} />,
+    },
+    {
+      page: 'Attendance',
+      label: 'Attendance',
+      icon: <IconAttendance size={16} />,
+    },
+    {
+      page: 'Subjects',
+      label: 'Subjects',
+      icon: <IconSubjects size={16} />,
+    },
+  ];
+
   if (profile.role === 'cr' || profile.role === 'admin') {
-    navItems.push('CR Portal');
+    navItems.push({
+      page: 'CR Updates',
+      label: 'CR Updates',
+      icon: <IconCRPortal size={16} />,
+    });
   }
-  navItems.push('Settings');
+
+  navItems.push({
+    page: 'Settings',
+    label: 'Settings',
+    icon: <IconSettings size={16} />,
+  });
 
   return (
-    <div className="app-shell">
-      {mobileMenuOpen && (
-        <div 
-          className="mobile-backdrop" 
-          onClick={() => setMobileMenuOpen(false)} 
-        />
-      )}
-
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="brand">
-          <div className="brand-icon">A</div>
-          <div>
-            <h2>AttendIQ</h2>
-            <span>{profile.role === 'cr' ? 'CR Edition' : 'DEC Edition'}</span>
-          </div>
-        </div>
-
-        <div className="sidebar-label">WORKSPACE</div>
-
-        <nav className="navigation">
-          {navItems.map((page) => (
-            <button
-              key={page}
-              className={`nav-item ${activePage === page ? 'active' : ''}`}
-              onClick={() => handleNavClick(page)}
-            >
-              <span className="nav-dot" />
-              {page}
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="profile-avatar">
-            {profile.fullName.charAt(0).toUpperCase() || 'S'}
-          </div>
-          <div className="profile-info">
-            <strong>{profile.fullName}</strong>
-            <span>{profile.department} • {profile.role.toUpperCase()}</span>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-content">
-        <header className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button 
-              className="mobile-menu-btn"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
-              aria-label="Toggle navigation"
-            >
-              ☰
-            </button>
-            <div>
-              <span className="breadcrumb">
-                DEC / {profile.role === 'cr' ? 'Class Representative' : 'Student Portal'}
+    <div className="app-wrapper">
+      {/* Clean Minimalist Top Institutional Header */}
+      <header className="top-navbar">
+        <div className="navbar-container">
+          {/* Brand */}
+          <div className="nav-brand" onClick={() => setActivePage('Dashboard')}>
+            <div className="nav-brand-logo">A</div>
+            <div className="nav-brand-info">
+              <h2>AttendIQ</h2>
+              <span className="nav-brand-sub">
+                Dhemaji Engineering College • {profile.role === 'cr' ? 'Class Representative' : 'Student Portal'}
               </span>
-              <h1>{activePage}</h1>
             </div>
           </div>
 
-          <div className="topbar-actions">
+          {/* Right Header Status & Profile Controls */}
+          <div className="nav-actions">
+            <span className="badge-pill" style={{ display: 'none' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--status-success)' }} />
+              CSE 3rd Sem
+            </span>
+
             <button
-              className="theme-toggle"
-              onClick={() => setDarkMode((current) => !current)}
-              aria-label="Toggle theme"
+              type="button"
+              className="theme-pill-btn"
+              onClick={() => setDarkMode((prev) => !prev)}
+              title="Toggle Light / Dark mode"
             >
-              {darkMode ? '☀ Light mode' : '☾ Dark mode'}
+              {darkMode ? <IconSun size={14} /> : <IconMoon size={14} />}
             </button>
+
+            {/* User Capsule */}
+            <div className="user-capsule" title={`${profile.fullName} (${profile.department})`}>
+              <div className="user-capsule-avatar">
+                {profile.fullName.charAt(0).toUpperCase() || 'S'}
+              </div>
+              <span className="user-capsule-name">
+                {profile.fullName.split(' ')[0] || 'Student'}
+              </span>
+            </div>
+
             <button
+              type="button"
+              className="signout-header-btn"
               onClick={handleSignOut}
-              style={{
-                background: 'transparent',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                color: 'inherit',
-                padding: '0.45rem 0.85rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-              }}
+              title="Sign Out"
             >
-              Sign Out
+              <IconLogOut size={16} />
             </button>
           </div>
-        </header>
+        </div>
+      </header>
 
+      {/* Main Page Container */}
+      <main className="page-container">
         {activePage === 'Dashboard' && (
           <Dashboard
             session={session}
             onNavigateToAttendance={() => setActivePage('Attendance')}
+            onNavigateToCR={() => setActivePage('CR Updates')}
+            userRole={profile.role}
+            userName={profile.fullName}
           />
         )}
 
@@ -238,7 +250,7 @@ function App() {
           <Subjects session={session} />
         )}
 
-        {activePage === 'CR Portal' && (
+        {activePage === 'CR Updates' && (
           <CRPortal session={session} />
         )}
 
@@ -249,6 +261,24 @@ function App() {
           />
         )}
       </main>
+
+      {/* Signature Floating Dynamic Bottom Dock */}
+      <nav className="floating-bottom-dock" role="navigation" aria-label="Main Navigation">
+        {navItems.map((item) => {
+          const isActive = activePage === item.page;
+          return (
+            <button
+              key={item.page}
+              type="button"
+              className={`dock-item ${isActive ? 'active' : ''}`}
+              onClick={() => setActivePage(item.page)}
+            >
+              <span className="dock-item-icon">{item.icon}</span>
+              <span className="dock-item-label">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

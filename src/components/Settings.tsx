@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import {
+  IconCheck,
+} from './Icons';
 
 interface Profile {
   full_name: string;
@@ -76,7 +79,7 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load configuration parameters.');
+      setError(err.message || 'Failed to load profile settings.');
     } finally {
       setLoading(false);
     }
@@ -85,7 +88,7 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (profile.target_threshold < 50 || profile.target_threshold > 100) {
-      setError('Target threshold must be between 50% and 100%.');
+      setError('Target percentage must be between 50% and 100%.');
       return;
     }
 
@@ -94,7 +97,6 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
       setError(null);
       setSuccess(null);
 
-      // 1. Update Profile
       const { error: upsertErr } = await supabase
         .from('profiles')
         .upsert({
@@ -108,7 +110,6 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
 
       if (upsertErr) throw upsertErr;
 
-      // 2. Update Semester End Date
       if (semesterId && semesterEndDate) {
         const { error: semUpdateErr } = await supabase
           .from('semesters')
@@ -118,172 +119,140 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
         if (semUpdateErr) throw semUpdateErr;
       }
 
-      setSuccess('Parameters committed successfully.');
+      setSuccess('Profile updated successfully.');
       onProfileUpdated();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.message || 'Failed to persist settings.');
+      setError(err.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div style={{ padding: '3rem 0', color: 'var(--text-muted)' }}>Loading telemetry parameters...</div>;
+    return (
+      <div style={{ padding: '3rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading settings...
+      </div>
+    );
   }
 
   return (
-    <div style={{ maxWidth: '800px' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <span className="eyebrow">SYSTEM PARAMETERS</span>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.2rem 0' }}>
-          Profile & Academic Horizon
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-          Manage your student credentials, cutoff rules, and exam eligibility calendar.
-        </p>
-      </div>
-
-      {error && (
-        <div
-          style={{
-            backgroundColor: 'var(--color-danger-bg)',
-            border: '1px solid var(--color-danger)',
-            color: '#fca5a5',
-            padding: '0.85rem 1.25rem',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div
-          style={{
-            backgroundColor: 'var(--color-success-bg)',
-            border: '1px solid var(--color-success)',
-            color: '#6ee7b7',
-            padding: '0.85rem 1.25rem',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-          }}
-        >
-          {success}
-        </div>
-      )}
-
-      <form
-        onSubmit={handleSave}
-        style={{
-          backgroundColor: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '1.75rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1.5rem',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              required
-              value={profile.full_name}
-              onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
-              placeholder="e.g. Priyangshu Das"
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              University Roll / Registration No.
-            </label>
-            <input
-              type="text"
-              value={profile.roll_number}
-              onChange={(e) => setProfile({ ...profile, roll_number: e.target.value })}
-              placeholder="e.g. 240101001"
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '800px', paddingBottom: '3rem' }}>
+      
+      <div className="card">
+        <div style={{ marginBottom: '1.25rem', paddingBottom: '0.85rem', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem 0' }}>
+            Student Profile & Settings
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+            Manage your student credentials, branch, and examination attendance threshold.
+          </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              Department / Specialization
-            </label>
-            <input
-              type="text"
-              required
-              value={profile.department}
-              onChange={(e) => setProfile({ ...profile, department: e.target.value })}
-              placeholder="e.g. Computer Science & Engineering"
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
+        {error && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              marginBottom: '1rem',
+              backgroundColor: 'var(--status-danger-bg)',
+              color: 'var(--status-danger)',
+              border: '1px solid var(--status-danger-border)',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              marginBottom: '1rem',
+              backgroundColor: 'var(--status-success-bg)',
+              color: 'var(--status-success)',
+              border: '1px solid var(--status-success-border)',
+            }}
+          >
+            ✓ {success}
+          </div>
+        )}
+
+        <form onSubmit={handleSave}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Full Name
+              </label>
+              <input
+                type="text"
+                required
+                value={profile.full_name}
+                onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                placeholder="e.g. Priyangshu Sarmah"
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                College Roll / Registration No.
+              </label>
+              <input
+                type="text"
+                value={profile.roll_number}
+                onChange={(e) => setProfile({ ...profile, roll_number: e.target.value })}
+                placeholder="e.g. 24-CSE-01"
+                className="input-field"
+              />
+            </div>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              Last Class Date (Pre-Exam Horizon)
-            </label>
-            <input
-              type="date"
-              required
-              value={semesterEndDate}
-              onChange={(e) => setSemesterEndDate(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
-          </div>
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Department
+              </label>
+              <input
+                type="text"
+                required
+                value={profile.department}
+                onChange={(e) => setProfile({ ...profile, department: e.target.value })}
+                placeholder="e.g. Computer Science & Engineering"
+                className="input-field"
+              />
+            </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.4rem' }}>
-            Institutional Target Threshold ({profile.target_threshold}%)
-          </label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Semester End Date
+              </label>
+              <input
+                type="date"
+                required
+                value={semesterEndDate}
+                onChange={(e) => setSemesterEndDate(e.target.value)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-card-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                Target Attendance Percentage Cutoff
+              </span>
+              <strong style={{ fontSize: '1.15rem', color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)' }}>
+                {profile.target_threshold}%
+              </strong>
+            </div>
+
             <input
               type="range"
               min="50"
@@ -291,49 +260,26 @@ export const Settings: React.FC<SettingsProps> = ({ session, onProfileUpdated })
               step="1"
               value={profile.target_threshold}
               onChange={(e) => setProfile({ ...profile, target_threshold: Number(e.target.value) })}
-              style={{ flex: 1, accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+              style={{ width: '100%', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
             />
-            <span
-              style={{
-                backgroundColor: 'var(--bg-input)',
-                padding: '0.4rem 0.85rem',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-subtle)',
-                fontWeight: 700,
-                color: '#818cf8',
-                minWidth: '55px',
-                textAlign: 'center',
-              }}
-            >
-              {profile.target_threshold}%
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', display: 'block', marginTop: '0.35rem' }}>
+              Standard Dhemaji Engineering College exam eligibility mandate is 75%.
             </span>
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem', display: 'block' }}>
-            All exam eligibility equations and ceiling calculations execute against this mandate.
-          </span>
-        </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              padding: '0.65rem 1.75rem',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.88rem',
-              fontWeight: 600,
-              cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: saving ? 0.7 : 1,
-              boxShadow: '0 4px 12px var(--accent-glow)',
-            }}
-          >
-            {saving ? 'Persisting...' : 'Save Configuration'}
-          </button>
-        </div>
-      </form>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn btn-primary"
+              style={{ padding: '0.65rem 1.4rem' }}
+            >
+              <IconCheck size={16} />
+              <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

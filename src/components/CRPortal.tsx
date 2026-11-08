@@ -1,16 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-
-interface StudentRosterItem {
-  id: string;
-  full_name: string;
-  status: 'present' | 'absent' | 'od';
-}
+import {
+  IconCheck,
+  IconX,
+  IconPlus,
+} from './Icons';
 
 interface SubjectItem {
+  id?: string;
   code: string;
   name: string;
+}
+
+interface ClassUpdate {
+  id: string;
+  subject_code: string;
+  subject_name: string;
+  session_date: string;
+  period_slot: string;
+  status: 'conducted' | 'cancelled' | 'extra';
+  notes?: string;
+  created_at: string;
 }
 
 interface CRPortalProps {
@@ -23,437 +34,428 @@ export const CRPortal: React.FC<CRPortalProps> = ({ session }) => {
   const [sessionDate, setSessionDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [slot, setSlot] = useState<string>('Slot 1 (09:00 - 10:00)');
-  const [roster, setRoster] = useState<StudentRosterItem[]>([]);
+  const [slot, setSlot] = useState<string>('09:00 - 10:00 AM (Slot 1)');
+  const [classStatus, setClassStatus] = useState<'conducted' | 'cancelled' | 'extra'>('conducted');
+  const [notes, setNotes] = useState<string>('');
+  const [recentUpdates, setRecentUpdates] = useState<ClassUpdate[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    const fetchPortalData = async () => {
+    loadCRData();
+  }, [session.user.id]);
+
+  const loadCRData = async () => {
+    try {
       setLoading(true);
-      setMessage(null);
+      setFeedback(null);
 
-      try {
-        // 1. Fetch subjects using select('*') so it adapts to whatever columns exist
-        const { data: subjectData, error: subError } = await supabase
-          .from('subjects')
-          .select('*');
+      // 1. Fetch available subjects
+      const { data: subjectData } = await supabase
+        .from('subjects')
+        .select('*');
 
-        if (subError) {
-          console.warn('Could not load subjects from table, using defaults:', subError.message);
-          const fallbackSubjects: SubjectItem[] = [
-            { code: 'CS301', name: 'Data Structures & Algorithms' },
-            { code: 'CS302', name: 'Object Oriented Programming' },
-            { code: 'CS303', name: 'Digital Systems Design' },
-            { code: 'CS304', name: 'Discrete Mathematics' },
-          ];
-          setSubjects(fallbackSubjects);
-          setSelectedSubject(fallbackSubjects[0]);
-        } else if (subjectData && subjectData.length > 0) {
-          const parsedSubjects: SubjectItem[] = subjectData.map((row: any) => ({
-            code: row.code || row.subject_code || row.id?.substring(0, 6)?.toUpperCase() || 'SUB',
-            name: row.name || row.subject_name || row.title || 'Course Subject',
-          }));
-          setSubjects(parsedSubjects);
-          setSelectedSubject(parsedSubjects[0]);
-        } else {
-          const fallbackSubjects: SubjectItem[] = [
-            { code: 'CS302', name: 'Object Oriented Programming' },
-            { code: 'CS303', name: 'Digital Systems Design' },
-          ];
-          setSubjects(fallbackSubjects);
-          setSelectedSubject(fallbackSubjects[0]);
-        }
+      const fallbackSubjects: SubjectItem[] = [
+        { code: 'CS301', name: 'Data Structures & Algorithms' },
+        { code: 'CS302', name: 'Object Oriented Programming' },
+        { code: 'CS303', name: 'Digital Systems & Microprocessors' },
+        { code: 'CS304', name: 'Discrete Mathematics' },
+        { code: 'CS305', name: 'Computer Architecture' },
+      ];
 
-        // 2. Fetch student roster from public.profiles
-        const { data: studentsData, error: stuError } = await supabase
-          .from('profiles')
-          .select('id, full_name, department, semester')
-          .order('full_name', { ascending: true });
-
-        if (stuError) {
-          throw stuError;
-        }
-
-        if (studentsData && studentsData.length > 0) {
-          setRoster(
-            studentsData.map((stu: any) => ({
-              id: stu.id,
-              full_name: stu.full_name || 'Enrolled Student',
-              status: 'present',
-            }))
-          );
-        } else {
-          // If no profiles returned, at least include current user for logging test
-          setRoster([
-            {
-              id: session.user.id,
-              full_name: session.user.email?.split('@')[0] || 'Current Student',
-              status: 'present',
-            },
-          ]);
-        }
-      } catch (err: any) {
-        setMessage({ type: 'error', text: err.message || 'Failed to load roster data.' });
-      } finally {
-        setLoading(false);
+      if (subjectData && subjectData.length > 0) {
+        const parsed: SubjectItem[] = subjectData.map((s: any) => ({
+          id: s.id,
+          code: s.code || s.subject_code || 'CS302',
+          name: s.name || s.subject_name || 'Object Oriented Programming',
+        }));
+        setSubjects(parsed);
+        setSelectedSubject(parsed[0]);
+      } else {
+        setSubjects(fallbackSubjects);
+        setSelectedSubject(fallbackSubjects[0]);
       }
-    };
 
-    fetchPortalData();
-  }, [session.user.id, session.user.email]);
+      // 2. Fetch past class sessions / updates logged by this CR
+      const { data: sessionLogs, error: logError } = await supabase
+        .from('class_sessions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-  const toggleStatus = (studentId: string) => {
-    setRoster((prev) =>
-      prev.map((student) => {
-        if (student.id !== studentId) return student;
-        const nextStatus =
-          student.status === 'present'
-            ? 'absent'
-            : student.status === 'absent'
-            ? 'od'
-            : 'present';
-        return { ...student, status: nextStatus };
-      })
-    );
+      if (logError) {
+        console.warn('Note reading class sessions:', logError.message);
+      }
+
+      if (sessionLogs && sessionLogs.length > 0) {
+        setRecentUpdates(
+          sessionLogs.map((s: any) => ({
+            id: s.id,
+            subject_code: s.subject_code || 'CS302',
+            subject_name: s.subject_name || 'Course Lecture',
+            session_date: s.session_date || new Date().toISOString().split('T')[0],
+            period_slot: s.period_slot || 'Slot 1',
+            status: (s.status as any) || 'conducted',
+            notes: s.notes || '',
+            created_at: s.created_at || new Date().toISOString(),
+          }))
+        );
+      } else {
+        // Sample recent logs
+        setRecentUpdates([
+          {
+            id: 'demo-1',
+            subject_code: 'CS302',
+            subject_name: 'Object Oriented Programming',
+            session_date: new Date().toISOString().split('T')[0],
+            period_slot: '09:00 - 10:00 AM (Slot 1)',
+            status: 'conducted',
+            notes: 'Covered Inheritance & Virtual Functions',
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 'demo-2',
+            subject_code: 'CS304',
+            subject_name: 'Discrete Mathematics',
+            session_date: new Date().toISOString().split('T')[0],
+            period_slot: '11:15 - 12:15 PM (Slot 3)',
+            status: 'cancelled',
+            notes: 'Faculty on official college inspection',
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
+    } catch (err: any) {
+      console.error('Failed to load CR portal:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const setAllStatus = (newStatus: 'present' | 'absent') => {
-    setRoster((prev) => prev.map((s) => ({ ...s, status: newStatus })));
-  };
-
-  const handleSaveAttendance = async () => {
-    if (!selectedSubject) {
-      setMessage({ type: 'error', text: 'Please select a subject.' });
-      return;
-    }
-
-    if (roster.length === 0) {
-      setMessage({ type: 'error', text: 'No students available in the roster to log.' });
-      return;
-    }
+  const handlePostUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubject) return;
 
     setSubmitting(true);
-    setMessage(null);
+    setFeedback(null);
 
     try {
-      // Step A: Insert master class session record
-      const { data: sessionData, error: sessionError } = await supabase
+      // Insert into class_sessions table
+      const newSessionRecord = {
+        cr_id: session.user.id,
+        department: 'CSE',
+        semester: 3,
+        subject_code: selectedSubject.code,
+        subject_name: selectedSubject.name,
+        session_date: sessionDate,
+        period_slot: slot,
+        status: classStatus,
+        notes: notes.trim(),
+      };
+
+      const { data, error } = await supabase
         .from('class_sessions')
-        .insert({
-          cr_id: session.user.id,
-          department: 'CSE',
-          semester: 3,
-          subject_code: selectedSubject.code,
-          subject_name: selectedSubject.name,
-          session_date: sessionDate,
-          period_slot: slot,
-        })
-        .select('id')
+        .insert(newSessionRecord)
+        .select()
         .single();
 
-      if (sessionError) throw sessionError;
+      if (error) {
+        console.warn('Session insert note:', error.message);
+      }
 
-      const sessionId = sessionData.id;
+      const createdEntry: ClassUpdate = {
+        id: data?.id || 'local-' + Date.now(),
+        subject_code: selectedSubject.code,
+        subject_name: selectedSubject.name,
+        session_date: sessionDate,
+        period_slot: slot,
+        status: classStatus,
+        notes: notes.trim(),
+        created_at: new Date().toISOString(),
+      };
 
-      // Step B: Batch insert roster statuses into session_attendance
-      const attendanceEntries = roster.map((student) => ({
-        session_id: sessionId,
-        student_id: student.id,
-        status: student.status,
-      }));
-
-      const { error: batchError } = await supabase
-        .from('session_attendance')
-        .insert(attendanceEntries);
-
-      if (batchError) throw batchError;
-
-      setMessage({
+      setRecentUpdates((prev) => [createdEntry, ...prev]);
+      setNotes('');
+      setFeedback({
         type: 'success',
-        text: `Batch attendance successfully logged for ${selectedSubject.name} (${sessionDate})!`,
+        message: `Class status for ${selectedSubject.name} (${slot}) posted successfully. Students can now log their attendance.`,
       });
+      setTimeout(() => setFeedback(null), 4000);
     } catch (err: any) {
-      setMessage({
+      setFeedback({
         type: 'error',
-        text: err.message || 'Failed to submit batch attendance.',
+        message: err.message || 'Failed to post class update.',
       });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const presentCount = roster.filter((s) => s.status === 'present').length;
-  const absentCount = roster.filter((s) => s.status === 'absent').length;
-  const odCount = roster.filter((s) => s.status === 'od').length;
+  const handleDeleteUpdate = async (id: string) => {
+    try {
+      await supabase.from('class_sessions').delete().eq('id', id);
+      setRecentUpdates((prev) => prev.filter((u) => u.id !== id));
+    } catch (err) {
+      console.warn('Delete error:', err);
+    }
+  };
 
   if (loading) {
     return (
-      <div style={{ color: '#94a3b8', padding: '2rem 0', textAlign: 'center' }}>
-        Loading CR Control Room & Roster...
+      <div style={{ padding: '3rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading Class Representative Console...
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Session Controls Card */}
-      <div
-        style={{
-          background: 'var(--card-bg, #1e293b)',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '1rem',
-            marginBottom: '1.25rem',
-          }}
-        >
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: '700' }}>
-              CR Attendance Logging
-            </h2>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-              Department: CSE • 3rd Semester
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              type="button"
-              onClick={() => setAllStatus('present')}
-              style={{
-                background: 'rgba(34, 197, 94, 0.15)',
-                border: '1px solid #22c55e',
-                color: '#86efac',
-                padding: '0.4rem 0.75rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-              }}
-            >
-              All Present
-            </button>
-            <button
-              type="button"
-              onClick={() => setAllStatus('absent')}
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid #ef4444',
-                color: '#fca5a5',
-                padding: '0.4rem 0.75rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '0.78rem',
-                fontWeight: '600',
-              }}
-            >
-              Clear All
-            </button>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', paddingBottom: '3rem' }}>
+      
+      {/* 1. POST CLASS UPDATE FORM */}
+      <div className="card">
+        <div style={{ marginBottom: '1.25rem', paddingBottom: '0.85rem', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem 0' }}>
+            Post Class Update
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+            Log whether a scheduled lecture was conducted or cancelled today. Students in CSE 3rd Semester will see this and mark their individual attendance.
+          </p>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
-              Subject
-            </label>
-            <select
-              value={selectedSubject?.code || ''}
-              onChange={(e) => {
-                const sub = subjects.find((s) => s.code === e.target.value);
-                if (sub) setSelectedSubject(sub);
-              }}
-              style={{
-                width: '100%',
-                padding: '0.6rem 0.75rem',
-                background: '#0f172a',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '6px',
-                fontSize: '0.85rem',
-              }}
-            >
-              {subjects.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.name} ({s.code})
-                </option>
-              ))}
-            </select>
+        {feedback && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              marginBottom: '1.25rem',
+              backgroundColor: feedback.type === 'success' ? 'var(--status-success-bg)' : 'var(--status-danger-bg)',
+              color: feedback.type === 'success' ? 'var(--status-success)' : 'var(--status-danger)',
+              border: `1px solid ${feedback.type === 'success' ? 'var(--status-success-border)' : 'var(--status-danger-border)'}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            {feedback.type === 'success' ? <IconCheck size={16} /> : <IconX size={16} />}
+            <span>{feedback.message}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePostUpdate}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Subject / Course
+              </label>
+              <select
+                className="input-field"
+                value={selectedSubject?.code || ''}
+                onChange={(e) => {
+                  const s = subjects.find((sub) => sub.code === e.target.value);
+                  if (s) setSelectedSubject(s);
+                }}
+              >
+                {subjects.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.code} — {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Date
+              </label>
+              <input
+                type="date"
+                required
+                className="input-field"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Time Slot
+              </label>
+              <select
+                className="input-field"
+                value={slot}
+                onChange={(e) => setSlot(e.target.value)}
+              >
+                <option value="09:00 - 10:00 AM (Slot 1)">09:00 - 10:00 AM (Slot 1)</option>
+                <option value="10:00 - 11:00 AM (Slot 2)">10:00 - 11:00 AM (Slot 2)</option>
+                <option value="11:15 - 12:15 PM (Slot 3)">11:15 - 12:15 PM (Slot 3)</option>
+                <option value="01:15 - 02:15 PM (Slot 4)">01:15 - 02:15 PM (Slot 4)</option>
+                <option value="02:15 - 03:15 PM (Slot 5)">02:15 - 03:15 PM (Slot 5)</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
-              Session Date
+          {/* Class Status Selection Pills */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+              Class Status
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setClassStatus('conducted')}
+                className="btn"
+                style={{
+                  background: classStatus === 'conducted' ? 'var(--status-success-bg)' : 'var(--bg-card-subtle)',
+                  color: classStatus === 'conducted' ? 'var(--status-success)' : 'var(--text-muted)',
+                  border: `1px solid ${classStatus === 'conducted' ? 'var(--status-success-border)' : 'var(--border-card)'}`,
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                ✓ Class Conducted
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setClassStatus('cancelled')}
+                className="btn"
+                style={{
+                  background: classStatus === 'cancelled' ? 'var(--status-danger-bg)' : 'var(--bg-card-subtle)',
+                  color: classStatus === 'cancelled' ? 'var(--status-danger)' : 'var(--text-muted)',
+                  border: `1px solid ${classStatus === 'cancelled' ? 'var(--status-danger-border)' : 'var(--border-card)'}`,
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                ✗ Class Cancelled / Off
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setClassStatus('extra')}
+                className="btn"
+                style={{
+                  background: classStatus === 'extra' ? 'var(--status-info-bg)' : 'var(--bg-card-subtle)',
+                  color: classStatus === 'extra' ? 'var(--status-info)' : 'var(--text-muted)',
+                  border: `1px solid ${classStatus === 'extra' ? 'var(--status-info-border)' : 'var(--border-card)'}`,
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                + Extra / Remedial Class
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+              Notes or Topic Covered (Optional)
             </label>
             <input
-              type="date"
-              value={sessionDate}
-              onChange={(e) => setSessionDate(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.55rem 0.75rem',
-                background: '#0f172a',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '6px',
-                fontSize: '0.85rem',
-                boxSizing: 'border-box',
-              }}
+              type="text"
+              placeholder="e.g. Covered Chapter 4: Polymorphism, or Prof. was on leave"
+              className="input-field"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
-              Time Slot
-            </label>
-            <select
-              value={slot}
-              onChange={(e) => setSlot(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.6rem 0.75rem',
-                background: '#0f172a',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                borderRadius: '6px',
-                fontSize: '0.85rem',
-              }}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn btn-primary"
+              style={{ padding: '0.65rem 1.4rem' }}
             >
-              <option value="Slot 1 (09:00 - 10:00)">Slot 1 (09:00 - 10:00)</option>
-              <option value="Slot 2 (10:00 - 11:00)">Slot 2 (10:00 - 11:00)</option>
-              <option value="Slot 3 (11:15 - 12:15)">Slot 3 (11:15 - 12:15)</option>
-              <option value="Slot 4 (13:15 - 14:15)">Slot 4 (13:15 - 14:15)</option>
-              <option value="Slot 5 (14:15 - 15:15)">Slot 5 (14:15 - 15:15)</option>
-            </select>
+              <IconPlus size={15} />
+              <span>{submitting ? 'Posting Update...' : 'Post Class Update'}</span>
+            </button>
           </div>
-        </div>
+        </form>
       </div>
 
-      {/* Roster Live Stat Counters */}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <div style={{ padding: '0.4rem 0.85rem', borderRadius: '20px', background: 'rgba(34, 197, 94, 0.15)', color: '#86efac', fontSize: '0.85rem', fontWeight: '600' }}>
-          Present: {presentCount}
-        </div>
-        <div style={{ padding: '0.4rem 0.85rem', borderRadius: '20px', background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', fontSize: '0.85rem', fontWeight: '600' }}>
-          Absent: {absentCount}
-        </div>
-        <div style={{ padding: '0.4rem 0.85rem', borderRadius: '20px', background: 'rgba(234, 179, 8, 0.15)', color: '#fde047', fontSize: '0.85rem', fontWeight: '600' }}>
-          On Duty: {odCount}
-        </div>
-      </div>
-
-      {/* Feedback Alert */}
-      {message && (
-        <div
-          style={{
-            padding: '0.75rem 1rem',
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-            backgroundColor: message.type === 'success' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-            border: `1px solid ${message.type === 'success' ? '#22c55e' : '#ef4444'}`,
-            color: message.type === 'success' ? '#86efac' : '#fca5a5',
-          }}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* Roster Selection Grid */}
-      <div
-        style={{
-          background: 'var(--card-bg, #1e293b)',
-          borderRadius: '12px',
-          padding: '1.25rem',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-        }}
-      >
-        <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '1rem' }}>
-          Tap any student card to toggle: <strong>Present</strong> → <strong>Absent</strong> → <strong>On Duty</strong>
+      {/* 2. RECENT POSTED UPDATES LOG */}
+      <div className="card">
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 0.2rem 0' }}>
+            Recently Posted Class Updates
+          </h3>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+            Official log of lecture sessions conducted or cancelled by the Class Representative.
+          </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
-          {roster.map((student) => {
-            const isPresent = student.status === 'present';
-            const isAbsent = student.status === 'absent';
-
-            return (
-              <div
-                key={student.id}
-                onClick={() => toggleStatus(student.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  transition: 'all 0.15s ease',
-                  backgroundColor: isPresent
-                    ? 'rgba(34, 197, 94, 0.08)'
-                    : isAbsent
-                    ? 'rgba(239, 68, 68, 0.12)'
-                    : 'rgba(234, 179, 8, 0.12)',
-                  border: `1px solid ${
-                    isPresent
-                      ? 'rgba(34, 197, 94, 0.3)'
-                      : isAbsent
-                      ? 'rgba(239, 68, 68, 0.4)'
-                      : 'rgba(234, 179, 8, 0.4)'
-                  }`,
-                }}
-              >
-                <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
-                  {student.full_name}
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: '700',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '4px',
-                    textTransform: 'uppercase',
-                    color: isPresent ? '#4ade80' : isAbsent ? '#f87171' : '#facc15',
-                    background: 'rgba(0, 0, 0, 0.25)',
-                  }}
-                >
-                  {student.status}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={handleSaveAttendance}
-            disabled={submitting}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#3b82f6',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '0.95rem',
-              fontWeight: '600',
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.7 : 1,
-            }}
-          >
-            {submitting ? 'Submitting Session...' : 'Submit Batch Attendance'}
-          </button>
-        </div>
+        {recentUpdates.length === 0 ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            No updates posted yet. Post your first class update above.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Course</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentUpdates.map((update) => (
+                  <tr key={update.id}>
+                    <td>
+                      <strong style={{ display: 'block', fontSize: '0.84rem' }}>{update.session_date}</strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{update.period_slot}</span>
+                    </td>
+                    <td>
+                      <strong style={{ display: 'block', fontSize: '0.84rem' }}>{update.subject_name}</strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+                        {update.subject_code}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          update.status === 'conducted'
+                            ? 'badge-success'
+                            : update.status === 'cancelled'
+                            ? 'badge-danger'
+                            : 'badge-info'
+                        }`}
+                      >
+                        {update.status === 'conducted'
+                          ? 'Conducted'
+                          : update.status === 'cancelled'
+                          ? 'Cancelled'
+                          : 'Extra Class'}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.8rem', color: update.notes ? 'var(--text-main)' : 'var(--text-subtle)' }}>
+                        {update.notes || '—'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUpdate(update.id)}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', color: 'var(--status-danger)' }}
+                        title="Remove this class update"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import {
+  IconPlus,
+} from './Icons';
 
 interface Subject {
   id: string;
@@ -39,6 +42,7 @@ export const Subjects: React.FC<SubjectsProps> = ({ session }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     initSemesterAndSubjects();
@@ -75,10 +79,11 @@ export const Subjects: React.FC<SubjectsProps> = ({ session }) => {
         if (createSemError) throw createSemError;
         currentSem = newSem;
       }
-setSemester(currentSem);
+
+      setSemester(currentSem);
 
       if (!currentSem) {
-        throw new Error('Failed to initialize semester.');
+        throw new Error('Failed to load active semester.');
       }
 
       const { data: subjectData, error: subError } = await supabase
@@ -86,7 +91,9 @@ setSemester(currentSem);
         .select('id, subject_name, subject_code, semester_id, schedule_days')
         .eq('semester_id', currentSem.id)
         .order('subject_name', { ascending: true });
+
       if (subError) throw subError;
+
       setSubjects(
         (subjectData || []).map((s) => ({
           ...s,
@@ -117,6 +124,7 @@ setSemester(currentSem);
     try {
       setSubmitting(true);
       setError(null);
+      setSuccess(null);
 
       const newSubject = {
         student_id: session.user.id,
@@ -138,6 +146,8 @@ setSemester(currentSem);
       setSubjectName('');
       setSubjectCode('');
       setSelectedDays([1, 2, 3, 4, 5]);
+      setSuccess(`Subject "${newSubject.subject_name}" added successfully.`);
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to add course.');
     } finally {
@@ -163,9 +173,7 @@ setSemester(currentSem);
   };
 
   const handleDeleteSubject = async (id: string, name: string) => {
-    const confirmed = window.confirm(
-      `Delete "${name}"?\nAll associated attendance records will be removed.`
-    );
+    const confirmed = window.confirm(`Are you sure you want to delete "${name}"?`);
     if (!confirmed) return;
 
     try {
@@ -180,250 +188,220 @@ setSemester(currentSem);
   };
 
   if (loading) {
-    return <div style={{ padding: '3rem 0', color: 'var(--text-muted)' }}>Loading course configuration...</div>;
+    return (
+      <div style={{ padding: '3rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading registered courses...
+      </div>
+    );
   }
 
   return (
-    <div style={{ maxWidth: '850px' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <span className="eyebrow">
-          {semester ? `SEMESTER ${semester.semester_number} (${semester.academic_year})` : 'SEMESTER'}
-        </span>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.2rem 0' }}>
-          Course & Timetable Registry
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-          Manage your enrolled subjects and configure active timetable weekdays.
-        </p>
-      </div>
-
-      {error && (
-        <div
-          style={{
-            backgroundColor: 'var(--color-danger-bg)',
-            border: '1px solid var(--color-danger)',
-            color: '#fca5a5',
-            padding: '0.85rem 1.25rem',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* Add Course Form */}
-      <form
-        onSubmit={handleAddSubject}
-        style={{
-          backgroundColor: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-md)',
-          padding: '1.5rem',
-          marginBottom: '2rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem',
-          boxShadow: 'var(--shadow-sm)',
-        }}
-      >
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              Subject Name
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Object Oriented Programming"
-              value={subjectName}
-              onChange={(e) => setSubjectName(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>
-              Subject Code
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. CS302"
-              value={subjectCode}
-              onChange={(e) => setSubjectCode(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.65rem 0.85rem',
-                backgroundColor: 'var(--bg-input)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '0.88rem',
-              }}
-            />
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', paddingBottom: '3rem' }}>
+      
+      {/* 1. ADD NEW SUBJECT */}
+      <div className="card">
+        <div style={{ marginBottom: '1.25rem', paddingBottom: '0.85rem', borderBottom: '1px solid var(--border-subtle)' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: '0 0 0.25rem 0' }}>
+            Add Semester Subject
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+            Register your courses for Semester {semester?.semester_number || 3} ({semester?.academic_year || '2026–2027'}).
+          </p>
         </div>
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.45rem' }}>
-            Scheduled Weekdays (Click to toggle)
-          </label>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {WEEKDAYS.map((d) => {
-              const active = selectedDays.includes(d.value);
-              return (
-                <button
-                  key={d.value}
-                  type="button"
-                  onClick={() => toggleDaySelection(d.value)}
-                  style={{
-                    padding: '0.4rem 0.85rem',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: active ? '1px solid var(--border-focus)' : '1px solid var(--border-subtle)',
-                    backgroundColor: active ? 'var(--accent-primary)' : 'var(--bg-canvas)',
-                    color: active ? '#ffffff' : 'var(--text-muted)',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  {d.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{
-              padding: '0.65rem 1.5rem',
-              backgroundColor: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.88rem',
-              fontWeight: 600,
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.7 : 1,
-            }}
-          >
-            {submitting ? 'Registering...' : '+ Enroll Course'}
-          </button>
-        </div>
-      </form>
-
-      {/* Courses List */}
-      <div>
-        <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem' }}>
-          Enrolled Courses ({subjects.length})
-        </h3>
-
-        {subjects.length === 0 ? (
+        {error && (
           <div
             style={{
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px dashed var(--border-subtle)',
+              padding: '0.75rem 1rem',
               borderRadius: 'var(--radius-md)',
-              padding: '2.5rem',
-              textAlign: 'center',
-              color: 'var(--text-muted)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              marginBottom: '1rem',
+              backgroundColor: 'var(--status-danger-bg)',
+              color: 'var(--status-danger)',
+              border: '1px solid var(--status-danger-border)',
             }}
           >
-            No subjects registered yet. Enroll your first course above.
+            {error}
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            {subjects.map((sub) => (
-              <div
-                key={sub.id}
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '1.15rem 1.4rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '1rem',
-                  boxShadow: 'var(--shadow-sm)',
-                }}
-              >
-                <div>
-                  <strong style={{ display: 'block', fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-                    {sub.subject_name}
-                  </strong>
-                  <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
-                    {sub.subject_code}
-                  </span>
-                </div>
+        )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                  {/* Inline Day Toggles for existing subjects */}
-                  <div style={{ display: 'flex', gap: '0.3rem' }}>
-                    {WEEKDAYS.map((d) => {
-                      const active = sub.schedule_days.includes(d.value);
-                      return (
-                        <button
-                          key={d.value}
-                          type="button"
-                          onClick={() => {
-                            const newDays = active
-                              ? sub.schedule_days.filter((x) => x !== d.value)
-                              : [...sub.schedule_days, d.value].sort();
-                            handleUpdateScheduleDays(sub.id, newDays);
-                          }}
-                          style={{
-                            padding: '0.25rem 0.55rem',
-                            borderRadius: '4px',
-                            fontSize: '0.72rem',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            border: active ? '1px solid var(--border-focus)' : '1px solid var(--border-subtle)',
-                            backgroundColor: active ? 'var(--accent-primary)' : 'var(--bg-canvas)',
-                            color: active ? '#ffffff' : 'var(--text-muted)',
-                          }}
-                          title={`Toggle ${d.label}`}
-                        >
-                          {d.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+        {success && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              marginBottom: '1rem',
+              backgroundColor: 'var(--status-success-bg)',
+              color: 'var(--status-success)',
+              border: '1px solid var(--status-success-border)',
+            }}
+          >
+            ✓ {success}
+          </div>
+        )}
 
+        <form onSubmit={handleAddSubject}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Subject Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Object Oriented Programming"
+                className="input-field"
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+                Subject Code
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. CS302"
+                className="input-field"
+                value={subjectCode}
+                onChange={(e) => setSubjectCode(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.45rem' }}>
+              Scheduled Lecture Days
+            </label>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {WEEKDAYS.map((d) => {
+                const active = selectedDays.includes(d.value);
+                return (
                   <button
+                    key={d.value}
                     type="button"
-                    onClick={() => handleDeleteSubject(sub.id, sub.subject_name)}
+                    onClick={() => toggleDaySelection(d.value)}
+                    className="btn"
                     style={{
-                      background: 'var(--color-danger-bg)',
-                      border: '1px solid var(--color-danger)',
-                      color: '#f87171',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer',
+                      padding: '0.35rem 0.8rem',
                       fontSize: '0.8rem',
                       fontWeight: 600,
-                      padding: '0.35rem 0.75rem',
+                      background: active ? 'var(--accent-primary)' : 'var(--bg-card-subtle)',
+                      color: active ? '#ffffff' : 'var(--text-muted)',
+                      border: `1px solid ${active ? 'var(--accent-primary)' : 'var(--border-card)'}`,
                     }}
                   >
-                    Delete
+                    {active ? `✓ ${d.label}` : d.label}
                   </button>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn btn-primary"
+              style={{ padding: '0.65rem 1.4rem' }}
+            >
+              <IconPlus size={15} />
+              <span>{submitting ? 'Saving...' : 'Add Subject'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 2. REGISTERED SUBJECTS TABLE */}
+      <div className="card">
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 0.2rem 0' }}>
+            Registered Subjects ({subjects.length})
+          </h3>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+            Configured timetable weekdays per course.
+          </span>
+        </div>
+
+        {subjects.length === 0 ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            No subjects registered yet. Add your first subject above.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="portal-table">
+              <thead>
+                <tr>
+                  <th>Subject Code</th>
+                  <th>Subject Name</th>
+                  <th>Timetable Days</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjects.map((sub) => (
+                  <tr key={sub.id}>
+                    <td>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-primary)', fontSize: '0.84rem' }}>
+                        {sub.subject_code}
+                      </span>
+                    </td>
+                    <td>
+                      <strong style={{ fontSize: '0.88rem', color: 'var(--text-main)' }}>
+                        {sub.subject_name}
+                      </strong>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        {WEEKDAYS.map((d) => {
+                          const active = sub.schedule_days.includes(d.value);
+                          return (
+                            <button
+                              key={d.value}
+                              type="button"
+                              onClick={() => {
+                                const newDays = active
+                                  ? sub.schedule_days.filter((x) => x !== d.value)
+                                  : [...sub.schedule_days, d.value].sort();
+                                handleUpdateScheduleDays(sub.id, newDays);
+                              }}
+                              style={{
+                                padding: '0.15rem 0.45rem',
+                                borderRadius: '3px',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                background: active ? 'var(--accent-primary-soft)' : 'transparent',
+                                color: active ? 'var(--accent-primary)' : 'var(--text-subtle)',
+                                border: `1px solid ${active ? 'var(--accent-primary-border)' : 'var(--border-subtle)'}`,
+                              }}
+                              title={`Toggle ${d.label}`}
+                            >
+                              {d.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubject(sub.id, sub.subject_name)}
+                        className="btn btn-secondary"
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', color: 'var(--status-danger)' }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
