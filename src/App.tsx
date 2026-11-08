@@ -25,6 +25,7 @@ interface ProfileState {
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [activePage, setActivePage] = useState<Page>('Dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -71,7 +72,10 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
       setSession(session);
       if (session) {
         loadUserProfile(session.user.id, session.user.email);
@@ -111,6 +115,16 @@ function App() {
       >
         Loading AttendIQ...
       </div>
+    );
+  }
+
+  // If coming in from a password recovery link, display the reset password form
+  if (isPasswordRecovery) {
+    return (
+      <Auth
+        initialMode="reset"
+        onAuthSuccess={() => setIsPasswordRecovery(false)}
+      />
     );
   }
 
