@@ -6,20 +6,15 @@ import { Dashboard } from './components/Dashboard';
 import { Attendance } from './components/Attendance';
 import { Subjects } from './components/Subjects';
 import { Settings } from './components/Settings';
+import { CRPortal } from './components/CRPortal';
 import './App.css';
 
-type Page = 'Dashboard' | 'Attendance' | 'Subjects' | 'Settings';
-
-const navigation: Page[] = [
-  'Dashboard',
-  'Attendance',
-  'Subjects',
-  'Settings',
-];
+type Page = 'Dashboard' | 'Attendance' | 'Subjects' | 'Settings' | 'CR Portal';
 
 interface ProfileState {
   fullName: string;
   department: string;
+  role: 'student' | 'cr' | 'admin';
 }
 
 function App() {
@@ -32,13 +27,14 @@ function App() {
   const [profile, setProfile] = useState<ProfileState>({
     fullName: '',
     department: 'CSE Department',
+    role: 'student',
   });
 
   const loadUserProfile = async (userId: string, email?: string) => {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('full_name, department')
+        .select('full_name, department, role')
         .eq('id', userId)
         .single();
 
@@ -46,17 +42,20 @@ function App() {
         setProfile({
           fullName: data.full_name,
           department: data.department || 'CSE Department',
+          role: data.role || 'student',
         });
       } else {
         setProfile({
           fullName: email ? email.split('@')[0] : 'Student',
           department: 'CSE Department',
+          role: 'student',
         });
       }
     } catch {
       setProfile({
         fullName: email ? email.split('@')[0] : 'Student',
         department: 'CSE Department',
+        role: 'student',
       });
     }
   };
@@ -118,7 +117,6 @@ function App() {
     );
   }
 
-  // If coming in from a password recovery link, display the reset password form
   if (isPasswordRecovery) {
     return (
       <Auth
@@ -132,9 +130,14 @@ function App() {
     return <Auth onAuthSuccess={() => {}} />;
   }
 
+  const navItems: Page[] = ['Dashboard', 'Attendance', 'Subjects'];
+  if (profile.role === 'cr' || profile.role === 'admin') {
+    navItems.push('CR Portal');
+  }
+  navItems.push('Settings');
+
   return (
     <div className="app-shell">
-      {/* Mobile Backdrop */}
       {mobileMenuOpen && (
         <div 
           className="mobile-backdrop" 
@@ -142,20 +145,19 @@ function App() {
         />
       )}
 
-      {/* Sidebar Drawer */}
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="brand">
           <div className="brand-icon">A</div>
           <div>
             <h2>AttendIQ</h2>
-            <span>DEC Edition</span>
+            <span>{profile.role === 'cr' ? 'CR Edition' : 'DEC Edition'}</span>
           </div>
         </div>
 
         <div className="sidebar-label">WORKSPACE</div>
 
         <nav className="navigation">
-          {navigation.map((page) => (
+          {navItems.map((page) => (
             <button
               key={page}
               className={`nav-item ${activePage === page ? 'active' : ''}`}
@@ -173,12 +175,11 @@ function App() {
           </div>
           <div className="profile-info">
             <strong>{profile.fullName}</strong>
-            <span>{profile.department}</span>
+            <span>{profile.department} • {profile.role.toUpperCase()}</span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="main-content">
         <header className="topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -190,7 +191,9 @@ function App() {
               ☰
             </button>
             <div>
-              <span className="breadcrumb">DEC / Student Portal</span>
+              <span className="breadcrumb">
+                DEC / {profile.role === 'cr' ? 'Class Representative' : 'Student Portal'}
+              </span>
               <h1>{activePage}</h1>
             </div>
           </div>
@@ -233,6 +236,10 @@ function App() {
 
         {activePage === 'Subjects' && (
           <Subjects session={session} />
+        )}
+
+        {activePage === 'CR Portal' && (
+          <CRPortal session={session} />
         )}
 
         {activePage === 'Settings' && (
