@@ -6,6 +6,7 @@ import {
   IconCheck,
   IconX,
 } from './Icons';
+import { ensureStudentSubjects } from '../lib/subjectsService';
 
 interface Subject {
   id: string;
@@ -62,6 +63,7 @@ export const Attendance: React.FC<AttendanceProps> = ({ session }) => {
       setLoading(true);
       setError(null);
 
+      let loadedSubjects: Subject[] = [];
       const { data: subData, error: subError } = await supabase
         .from('subjects')
         .select('id, subject_name, subject_code, schedule_days')
@@ -69,10 +71,22 @@ export const Attendance: React.FC<AttendanceProps> = ({ session }) => {
         .order('subject_name', { ascending: true });
 
       if (subError) throw subError;
-      const loadedSubjects: Subject[] = (subData || []).map((s) => ({
-        ...s,
-        schedule_days: s.schedule_days || [1, 2, 3, 4, 5],
-      }));
+
+      if (subData && subData.length > 0) {
+        loadedSubjects = subData.map((s) => ({
+          ...s,
+          schedule_days: s.schedule_days || [1, 2, 3, 4, 5],
+        }));
+      } else {
+        const seeded = await ensureStudentSubjects(session.user.id);
+        loadedSubjects = seeded.map((s) => ({
+          id: s.id,
+          subject_name: s.subject_name,
+          subject_code: s.subject_code,
+          schedule_days: s.schedule_days || [1, 2, 3, 4, 5],
+        }));
+      }
+
       setSubjects(loadedSubjects);
 
       const initialBatch: Record<string, 'present' | 'absent' | 'cancelled' | 'od' | 'skip'> = {};
