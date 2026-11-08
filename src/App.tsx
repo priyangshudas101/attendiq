@@ -27,6 +27,7 @@ function App() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [activePage, setActivePage] = useState<Page>('Dashboard');
   const [darkMode, setDarkMode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileState>({
     fullName: '',
     department: 'CSE Department',
@@ -91,6 +92,11 @@ function App() {
     await supabase.auth.signOut();
   };
 
+  const handleNavClick = (page: Page) => {
+    setActivePage(page);
+    setMobileMenuOpen(false);
+  };
+
   if (loadingSession) {
     return (
       <div
@@ -114,7 +120,16 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Mobile Backdrop */}
+      {mobileMenuOpen && (
+        <div 
+          className="mobile-backdrop" 
+          onClick={() => setMobileMenuOpen(false)} 
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="brand">
           <div className="brand-icon">A</div>
           <div>
@@ -130,7 +145,7 @@ function App() {
             <button
               key={page}
               className={`nav-item ${activePage === page ? 'active' : ''}`}
-              onClick={() => setActivePage(page)}
+              onClick={() => handleNavClick(page)}
             >
               <span className="nav-dot" />
               {page}
@@ -149,11 +164,21 @@ function App() {
         </div>
       </aside>
 
+      {/* Main Content */}
       <main className="main-content">
         <header className="topbar">
-          <div>
-            <span className="breadcrumb">DEC / Student Portal</span>
-            <h1>{activePage}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button 
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label="Toggle navigation"
+            >
+              ☰
+            </button>
+            <div>
+              <span className="breadcrumb">DEC / Student Portal</span>
+              <h1>{activePage}</h1>
+            </div>
           </div>
 
           <div className="topbar-actions">
